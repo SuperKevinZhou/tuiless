@@ -2,7 +2,7 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow, bail};
-use crossterm::event::{KeyCode, KeyModifiers, MouseButton};
+use crossterm::event::{KeyCode, MouseButton};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_COLS: u16 = 80;
@@ -208,6 +208,7 @@ pub struct ModifierFlags {
 }
 
 impl ModifierFlags {
+    #[cfg(test)]
     pub fn empty() -> Self {
         Self {
             ctrl: false,
@@ -418,15 +419,6 @@ impl From<KeyCode> for KeyCodeSpec {
             KeyCode::Char(ch) => KeyCodeSpec::Char(ch),
             _ => KeyCodeSpec::Esc,
         }
-    }
-}
-
-pub fn modifiers_from_crossterm(modifiers: KeyModifiers) -> ModifierFlags {
-    ModifierFlags {
-        ctrl: modifiers.contains(KeyModifiers::CONTROL),
-        alt: modifiers.contains(KeyModifiers::ALT),
-        shift: modifiers.contains(KeyModifiers::SHIFT),
-        meta: modifiers.contains(KeyModifiers::SUPER),
     }
 }
 

@@ -9,7 +9,6 @@ use tokio::sync::Mutex;
 pub struct PtySession {
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub reader: Arc<Mutex<Box<dyn Read + Send>>>,
-    pub shell: String,
     master: Mutex<Box<dyn MasterPty + Send>>,
 }
 
@@ -33,7 +32,6 @@ impl PtySession {
         Ok(Self {
             writer: Arc::new(Mutex::new(writer)),
             reader: Arc::new(Mutex::new(reader)),
-            shell: shell.to_string(),
             master: Mutex::new(pair.master),
         })
     }

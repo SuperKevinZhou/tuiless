@@ -17,7 +17,6 @@ use crate::screen::ScreenBuffer;
 use crate::winpty::{PtySession, default_shell};
 
 struct RuntimeState {
-    session_key: String,
     cwd: PathBuf,
     tabs: HashMap<String, Arc<TabState>>,
 }
@@ -44,7 +43,6 @@ pub async fn serve(session_key: String, cwd: PathBuf) -> Result<()> {
     }
 
     let state = Arc::new(RwLock::new(RuntimeState {
-        session_key: session_key.clone(),
         cwd: cwd.clone(),
         tabs: HashMap::new(),
     }));
