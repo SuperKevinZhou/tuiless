@@ -30,7 +30,7 @@ struct TabState {
     last_activity_ms: Arc<RwLock<u128>>,
     created_at_ms: u128,
     screen: Arc<RwLock<ScreenBuffer>>,
-    writer: Arc<tokio::sync::Mutex<std::fs::File>>,
+    writer: Arc<tokio::sync::Mutex<Box<dyn std::io::Write + Send>>>,
     _session: Arc<PtySession>,
 }
 
@@ -217,6 +217,7 @@ fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()
     let activity = Arc::clone(&tab_state.last_activity_ms);
     let runtime_handle = tokio::runtime::Handle::current();
     let reader = Arc::clone(&session.reader);
+    let writer = Arc::clone(&tab_state.writer);
 
     std::thread::spawn(move || {
         let mut buffer = [0u8; 4096];
@@ -229,6 +230,15 @@ fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()
                 Ok(0) => break,
                 Ok(bytes_read) => {
                     let owned = buffer[..bytes_read].to_vec();
+                    if owned.as_slice() == b"\x1b[6n" {
+                        let writer = Arc::clone(&writer);
+                        runtime_handle.block_on(async move {
+                            let mut writer = writer.lock().await;
+                            let _ = writer.write_all(b"\x1b[1;1R");
+                            let _ = writer.flush();
+                        });
+                        continue;
+                    }
                     let screen = Arc::clone(&screen);
                     let activity = Arc::clone(&activity);
                     runtime_handle.block_on(async move {

@@ -14,9 +14,11 @@ pub fn canonical_session_key(cwd: &Path) -> Result<String> {
 }
 
 pub fn normalize_cwd(cwd: &Path) -> Result<PathBuf> {
-    cwd.canonicalize()
+    let path = cwd
+        .canonicalize()
         .or_else(|_| normalize_fallback(cwd))
-        .context("failed to canonicalize cwd")
+        .context("failed to canonicalize cwd")?;
+    Ok(strip_windows_verbatim_prefix(path))
 }
 
 fn normalize_fallback(path: &Path) -> Result<PathBuf> {
@@ -26,6 +28,18 @@ fn normalize_fallback(path: &Path) -> Result<PathBuf> {
         std::env::current_dir()?.join(path)
     };
     Ok(base)
+}
+
+fn strip_windows_verbatim_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        const VERBATIM_PREFIX: &str = r"\\?\";
+        let raw = path.to_string_lossy();
+        if let Some(stripped) = raw.strip_prefix(VERBATIM_PREFIX) {
+            return PathBuf::from(stripped);
+        }
+    }
+    path
 }
 
 #[cfg(test)]
