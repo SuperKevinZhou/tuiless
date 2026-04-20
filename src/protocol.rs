@@ -282,6 +282,7 @@ pub fn parse_key_spec(input: &str, explicit: &ModifierFlags) -> Result<KeySpec> 
 fn parse_key_code(input: &str) -> Result<KeyCodeSpec> {
     let lower = input.to_ascii_lowercase();
     let key = match lower.as_str() {
+        "space" => KeyCodeSpec::Char(' '),
         "enter" => KeyCodeSpec::Enter,
         "tab" => KeyCodeSpec::Tab,
         "backtab" => KeyCodeSpec::BackTab,
@@ -489,5 +490,11 @@ mod tests {
         assert_eq!(String::from_utf8(down).unwrap(), "\u{1b}[<0;13;5M");
         assert_eq!(String::from_utf8(up).unwrap(), "\u{1b}[<3;13;5m");
         assert_eq!(String::from_utf8(drag).unwrap(), "\u{1b}[<32;13;5M");
+    }
+
+    #[test]
+    fn parse_space_key_alias() {
+        let spec = parse_key_spec("Space", &ModifierFlags::empty()).unwrap();
+        assert_eq!(spec.key, KeyCodeSpec::Char(' '));
     }
 }
