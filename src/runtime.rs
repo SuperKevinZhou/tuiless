@@ -201,7 +201,9 @@ async fn handle_request(
             Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::ResizeTab { tab, cols, rows } => {
-            let tab_state = ensure_tab(&state, &tab, cols, rows).await?;
+            let tab_state = ensure_tab(&state, &tab, cols.max(1), rows.max(1)).await?;
+            let cols = cols.max(1);
+            let rows = rows.max(1);
             tab_state._session.resize(cols, rows)?;
             *tab_state.cols.write().await = cols;
             *tab_state.rows.write().await = rows;
