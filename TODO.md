@@ -11,13 +11,15 @@ This file tracks the remaining work to complete the v0 plan.
 - [x] Support lazy tab creation for tab-targeting commands.
 - [x] Implement `exec` as `type line` plus Enter.
 - [x] Capture current viewport text with `snapshot`.
+- [x] Add `fetch` to return full retained tab text including scrollback.
 - [x] Store tab terminal size and report it in `list`.
 - [x] Implement `resize` against the PTY and screen parser.
 - [x] Add key parsing for chord syntax such as `Ctrl+A`.
 - [x] Add raw and convenience mouse command surfaces.
 - [x] Add unit tests for key parsing, mouse event encoding, session keys, and screen basics.
-- [ ] Make `close --all` a clean request/response shutdown instead of a direct process exit.
+- [x] Make `close --all` a clean request/response shutdown instead of a direct process exit.
 - [ ] Add integration tests for `open -> exec -> snapshot`.
+- [ ] Add integration tests for `open -> exec -> fetch`.
 - [ ] Add integration tests for `type -> press Enter -> snapshot`.
 - [ ] Add integration tests for `resize -> list -> snapshot`.
 - [ ] Add integration tests for workspace isolation.
@@ -29,7 +31,7 @@ This file tracks the remaining work to complete the v0 plan.
 
 ## Runtime / IPC
 
-- [ ] Replace `close --all`'s direct `process::exit(0)` with an orderly shutdown path:
+- [x] Replace `close --all`'s direct `process::exit(0)` with an orderly shutdown path:
   - send `Ok`;
   - stop accepting new connections;
   - drop tabs and PTYs;
@@ -44,6 +46,7 @@ This file tracks the remaining work to complete the v0 plan.
 
 - [ ] Confirm `snapshot` behavior for fullscreen/alternate-screen TUIs.
 - [ ] Confirm viewport-only behavior under scrollback-heavy output.
+- [ ] Confirm `fetch` behavior under alternate-screen/fullscreen TUIs.
 - [ ] Add a structured debug mode for raw PTY bytes if future parser issues appear.
 - [ ] Handle more terminal query responses beyond `ESC[6n` if real TUIs need them.
 - [ ] Decide whether to expose `--json` snapshots in a later version.
@@ -63,9 +66,10 @@ This file tracks the remaining work to complete the v0 plan.
 ## Attach
 
 - [ ] Replace the current polling attach loop with a better event/update model.
-- [ ] Verify keyboard forwarding in raw mode.
-- [ ] Verify resize forwarding from terminal window events.
-- [ ] Verify mouse forwarding in attach mode.
+- [x] Forward keyboard input from raw mode.
+- [x] Forward terminal resize events.
+- [x] Forward mouse events in attach mode.
+- [ ] Validate attach interactively against a real shell session.
 - [ ] Add a visible status/help hint for detach.
 - [ ] Decide whether attach should use alternate screen or preserve normal terminal scrollback.
 

@@ -8,7 +8,8 @@ use crate::attach;
 use crate::cli;
 use crate::ipc;
 use crate::protocol::{
-    ClientRequest, KeySpec, ModifierFlags, MouseButtonSpec, MouseEventSpec, ServerResponse, parse_key_spec,
+    ClientRequest, KeySpec, ModifierFlags, MouseButtonSpec, MouseEventSpec, ServerResponse,
+    parse_key_spec,
 };
 use crate::registry;
 use crate::session::{canonical_session_key, normalize_cwd};
@@ -41,10 +42,25 @@ impl RuntimeClient {
         .await
     }
 
+    pub async fn fetch_raw(&self, tab: &str, wait_stable_ms: u64) -> Result<ServerResponse> {
+        self.send(&ClientRequest::Fetch {
+            tab: tab.to_string(),
+            wait_stable_ms,
+        })
+        .await
+    }
+
     pub async fn snapshot_text(&self, tab: &str, wait_stable_ms: u64) -> Result<String> {
         match self.snapshot_raw(tab, wait_stable_ms).await? {
             ServerResponse::SnapshotText { text, .. } => Ok(text),
             other => bail!("unexpected snapshot response: {other:?}"),
+        }
+    }
+
+    pub async fn fetch_text(&self, tab: &str, wait_stable_ms: u64) -> Result<String> {
+        match self.fetch_raw(tab, wait_stable_ms).await? {
+            ServerResponse::FetchText { text, .. } => Ok(text),
+            other => bail!("unexpected fetch response: {other:?}"),
         }
     }
 
@@ -131,6 +147,10 @@ pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
         }
         cli::Command::Snapshot(args) => {
             let text = client.snapshot_text(&args.tab, args.wait_stable_ms).await?;
+            print!("{text}");
+        }
+        cli::Command::Fetch(args) => {
+            let text = client.fetch_text(&args.tab, args.wait_stable_ms).await?;
             print!("{text}");
         }
         cli::Command::Exec(args) => {
@@ -265,7 +285,12 @@ pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
             for tab in client.list().await? {
                 println!(
                     "{}\t{}\t{}x{}\tcreated={}\tlast_activity={}",
-                    tab.name, tab.shell, tab.cols, tab.rows, tab.created_at_ms, tab.last_activity_at_ms
+                    tab.name,
+                    tab.shell,
+                    tab.cols,
+                    tab.rows,
+                    tab.created_at_ms,
+                    tab.last_activity_at_ms
                 );
             }
         }
@@ -304,10 +329,10 @@ async fn ensure_runtime(cwd: &PathBuf, session_key: &str) -> Result<RuntimeClien
 
     let endpoint = ipc::pipe_name(session_key);
     for _ in 0..100 {
-        if let Some(entry) = registry::read_entry(session_key)? {
-            if let Ok(client) = try_connect(entry.endpoint.clone()).await {
-                return Ok(client);
-            }
+        if let Some(entry) = registry::read_entry(session_key)?
+            && let Ok(client) = try_connect(entry.endpoint.clone()).await
+        {
+            return Ok(client);
         }
         if let Ok(client) = try_connect(endpoint.clone()).await {
             return Ok(client);

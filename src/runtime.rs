@@ -9,12 +9,33 @@ use tokio::sync::RwLock;
 
 use crate::ipc;
 use crate::protocol::{
-    ClientRequest, DEFAULT_COLS, DEFAULT_ROWS, KeySpec, ServerResponse, SessionRegistryEntry, TabSummary,
-    now_ms,
+    ClientRequest, DEFAULT_COLS, DEFAULT_ROWS, KeySpec, ServerResponse, SessionRegistryEntry,
+    TabSummary, now_ms,
 };
 use crate::registry;
 use crate::screen::ScreenBuffer;
 use crate::winpty::{PtySession, default_shell};
+
+struct RuntimeReply {
+    response: ServerResponse,
+    shutdown: bool,
+}
+
+impl RuntimeReply {
+    fn continue_with(response: ServerResponse) -> Self {
+        Self {
+            response,
+            shutdown: false,
+        }
+    }
+
+    fn shutdown_with(response: ServerResponse) -> Self {
+        Self {
+            response,
+            shutdown: true,
+        }
+    }
+}
 
 struct RuntimeState {
     cwd: PathBuf,
@@ -36,10 +57,13 @@ struct TabState {
 pub async fn serve(session_key: String, cwd: PathBuf) -> Result<()> {
     let endpoint = ipc::pipe_name(&session_key);
 
-    if let Some(existing) = registry::read_entry(&session_key)? {
-        if existing.pid != std::process::id() && ipc::send_request::<_, ServerResponse>(&existing.endpoint, &ClientRequest::ListTabs).await.is_ok() {
-            return Ok(());
-        }
+    if let Some(existing) = registry::read_entry(&session_key)?
+        && existing.pid != std::process::id()
+        && ipc::send_request::<_, ServerResponse>(&existing.endpoint, &ClientRequest::ListTabs)
+            .await
+            .is_ok()
+    {
+        return Ok(());
     }
 
     let state = Arc::new(RwLock::new(RuntimeState {
@@ -61,13 +85,21 @@ pub async fn serve(session_key: String, cwd: PathBuf) -> Result<()> {
         let accept_key = accept_key.clone();
         async move {
             let request = serde_json::from_slice::<ClientRequest>(&payload)?;
-            let response = handle_request(state, request, &accept_key).await.unwrap_or_else(|error| {
-                ServerResponse::Error {
-                    code: "runtime".to_string(),
-                    message: format!("{error:#}"),
-                }
-            });
-            Ok(serde_json::to_vec(&response)?)
+            let reply = handle_request(state, request, &accept_key)
+                .await
+                .unwrap_or_else(|error| RuntimeReply {
+                    response: ServerResponse::Error {
+                        code: "runtime".to_string(),
+                        message: format!("{error:#}"),
+                    },
+                    shutdown: false,
+                });
+            let bytes = serde_json::to_vec(&reply.response)?;
+            Ok(if reply.shutdown {
+                ipc::HandlerResponse::shutdown_with(bytes)
+            } else {
+                ipc::HandlerResponse::continue_with(bytes)
+            })
         }
     })
     .await;
@@ -82,7 +114,7 @@ async fn handle_request(
     state: Arc<RwLock<RuntimeState>>,
     request: ClientRequest,
     session_key: &str,
-) -> Result<ServerResponse> {
+) -> Result<RuntimeReply> {
     match request {
         ClientRequest::OpenTab { tab, cols, rows } => {
             ensure_tab(
@@ -92,44 +124,67 @@ async fn handle_request(
                 rows.unwrap_or(DEFAULT_ROWS),
             )
             .await?;
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
-        ClientRequest::Snapshot { tab, wait_stable_ms } => {
+        ClientRequest::Snapshot {
+            tab,
+            wait_stable_ms,
+        } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             wait_stable(&tab_state, wait_stable_ms).await;
             let cols = *tab_state.cols.read().await;
             let rows = *tab_state.rows.read().await;
             let text = tab_state.screen.read().await.viewport_text();
-            Ok(ServerResponse::SnapshotText { tab, cols, rows, text })
+            Ok(RuntimeReply::continue_with(ServerResponse::SnapshotText {
+                tab,
+                cols,
+                rows,
+                text,
+            }))
+        }
+        ClientRequest::Fetch {
+            tab,
+            wait_stable_ms,
+        } => {
+            let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
+            wait_stable(&tab_state, wait_stable_ms).await;
+            let text = tab_state.screen.write().await.full_text();
+            Ok(RuntimeReply::continue_with(ServerResponse::FetchText {
+                tab,
+                text,
+            }))
         }
         ClientRequest::ExecLine { tab, line } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             write_bytes(&tab_state, line.as_bytes()).await?;
-            write_bytes(&tab_state, &KeySpec {
-                key: crate::protocol::KeyCodeSpec::Enter,
-                ctrl: false,
-                alt: false,
-                shift: false,
-                meta: false,
-            }
-            .to_bytes()?)
+            write_bytes(
+                &tab_state,
+                &KeySpec {
+                    key: crate::protocol::KeyCodeSpec::Enter,
+                    ctrl: false,
+                    alt: false,
+                    shift: false,
+                    meta: false,
+                }
+                .to_bytes()?,
+            )
             .await?;
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::TypeText { tab, text } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             write_bytes(&tab_state, text.as_bytes()).await?;
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::PressKey { tab, key } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             write_bytes(&tab_state, &key.to_bytes()?).await?;
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::MouseEvent { tab, event } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             write_bytes(&tab_state, &event.to_escape()).await?;
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::ResizeTab { tab, cols, rows } => {
             let tab_state = ensure_tab(&state, &tab, cols, rows).await?;
@@ -137,7 +192,7 @@ async fn handle_request(
             *tab_state.cols.write().await = cols;
             *tab_state.rows.write().await = rows;
             tab_state.screen.write().await.resize(cols, rows);
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::ListTabs => {
             let tabs = {
@@ -155,19 +210,21 @@ async fn handle_request(
                 }
                 tabs
             };
-            Ok(ServerResponse::TabList { tabs })
+            Ok(RuntimeReply::continue_with(ServerResponse::TabList {
+                tabs,
+            }))
         }
         ClientRequest::CloseTab { tab } => {
             let removed = state.write().await.tabs.remove(&tab);
             if removed.is_none() {
                 bail!("tab `{tab}` does not exist");
             }
-            Ok(ServerResponse::Ok)
+            Ok(RuntimeReply::continue_with(ServerResponse::Ok))
         }
         ClientRequest::CloseAll => {
             state.write().await.tabs.clear();
             registry::delete_entry(session_key)?;
-            std::process::exit(0);
+            Ok(RuntimeReply::shutdown_with(ServerResponse::Ok))
         }
     }
 }

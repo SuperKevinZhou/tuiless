@@ -41,6 +41,10 @@ pub enum ClientRequest {
         tab: String,
         wait_stable_ms: u64,
     },
+    Fetch {
+        tab: String,
+        wait_stable_ms: u64,
+    },
     ExecLine {
         tab: String,
         line: String,
@@ -76,6 +80,10 @@ pub enum ServerResponse {
         tab: String,
         cols: u16,
         rows: u16,
+        text: String,
+    },
+    FetchText {
+        tab: String,
         text: String,
     },
     TabList {
@@ -176,6 +184,11 @@ pub enum MouseEventSpec {
         x: u16,
         y: u16,
     },
+    Drag {
+        x: u16,
+        y: u16,
+        button: MouseButtonSpec,
+    },
     Wheel {
         x: Option<u16>,
         y: Option<u16>,
@@ -186,9 +199,14 @@ pub enum MouseEventSpec {
 impl MouseEventSpec {
     pub fn to_escape(self) -> Vec<u8> {
         match self {
-            MouseEventSpec::Down { x, y, button } => encode_sgr_mouse(button.as_xterm_code(), x, y, true),
+            MouseEventSpec::Down { x, y, button } => {
+                encode_sgr_mouse(button.as_xterm_code(), x, y, true)
+            }
             MouseEventSpec::Up { x, y, .. } => encode_sgr_mouse(3, x, y, false),
             MouseEventSpec::Move { x, y } => encode_sgr_mouse(35, x, y, true),
+            MouseEventSpec::Drag { x, y, button } => {
+                encode_sgr_mouse(button.as_xterm_code() + 32, x, y, true)
+            }
             MouseEventSpec::Wheel { x, y, delta_y } => {
                 let x = x.unwrap_or(0);
                 let y = y.unwrap_or(0);
@@ -242,7 +260,10 @@ pub fn parse_key_spec(input: &str, explicit: &ModifierFlags) -> Result<KeySpec> 
             spec.alt = true;
         } else if normalized.eq_ignore_ascii_case("shift") {
             spec.shift = true;
-        } else if normalized.eq_ignore_ascii_case("meta") || normalized.eq_ignore_ascii_case("cmd") || normalized.eq_ignore_ascii_case("super") {
+        } else if normalized.eq_ignore_ascii_case("meta")
+            || normalized.eq_ignore_ascii_case("cmd")
+            || normalized.eq_ignore_ascii_case("super")
+        {
             spec.meta = true;
         } else {
             if key_part.is_some() {
@@ -252,7 +273,8 @@ pub fn parse_key_spec(input: &str, explicit: &ModifierFlags) -> Result<KeySpec> 
         }
     }
 
-    let key_raw = key_part.ok_or_else(|| anyhow!("key specification `{input}` is missing a key"))?;
+    let key_raw =
+        key_part.ok_or_else(|| anyhow!("key specification `{input}` is missing a key"))?;
     spec.key = parse_key_code(&key_raw)?;
     Ok(spec)
 }
@@ -458,7 +480,14 @@ mod tests {
             button: MouseButtonSpec::Left,
         }
         .to_escape();
+        let drag = MouseEventSpec::Drag {
+            x: 12,
+            y: 4,
+            button: MouseButtonSpec::Left,
+        }
+        .to_escape();
         assert_eq!(String::from_utf8(down).unwrap(), "\u{1b}[<0;13;5M");
         assert_eq!(String::from_utf8(up).unwrap(), "\u{1b}[<3;13;5m");
+        assert_eq!(String::from_utf8(drag).unwrap(), "\u{1b}[<32;13;5M");
     }
 }

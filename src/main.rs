@@ -28,7 +28,11 @@ async fn try_main() -> Result<()> {
             runtime::serve(session_key, cwd).await?;
         }
         command => {
-            app::run(command, std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))).await?;
+            app::run(
+                command,
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            )
+            .await?;
         }
     }
     Ok(())

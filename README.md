@@ -6,7 +6,7 @@ The core idea is:
 
 - every CLI invocation is short-lived;
 - a per-workspace background runtime owns the actual shell tabs;
-- commands such as `exec`, `press`, `type`, `resize`, and `snapshot` talk to that runtime over local IPC;
+- commands such as `exec`, `press`, `type`, `resize`, `snapshot`, and `fetch` talk to that runtime over local IPC;
 - `snapshot` returns the current visible terminal viewport as plain text.
 
 This is intentionally similar in spirit to browser automation CLIs, but the target is a terminal tab rather than a DOM page. In v0, the only supported resource is a named shell tab.
@@ -21,15 +21,15 @@ Working core path:
 - create or reuse a named shell tab;
 - execute shell input with `exec`;
 - capture the current viewport with `snapshot`;
+- fetch the full terminal text history with `fetch`;
 - resize a tab;
 - list open tabs.
 
 Known rough edges:
 
 - Windows is the only currently implemented IPC target.
-- `attach` exists but is a minimal polling-based implementation and needs more testing.
+- `attach` exists as a minimal polling-based interactive view and still needs broader real-TUI testing.
 - mouse commands inject terminal mouse escape sequences, but target applications must enable mouse reporting.
-- `close --all` still needs a cleaner request/response shutdown path.
 - integration tests are not yet complete.
 
 ## Install / Build
@@ -64,6 +64,12 @@ Snapshot the current visible viewport:
 .\target\debug\tuiless.exe snapshot tab_1
 ```
 
+Fetch the full text content accumulated in the tab:
+
+```powershell
+.\target\debug\tuiless.exe fetch tab_1
+```
+
 List tabs in the current workspace runtime:
 
 ```powershell
@@ -81,8 +87,6 @@ Clean up the runtime:
 ```powershell
 .\target\debug\tuiless.exe close --all
 ```
-
-If `close --all` hits the known rough shutdown behavior during development, manually stop the runtime process and remove `.tuiless/`.
 
 ## Runtime Model
 
@@ -111,6 +115,18 @@ tuiless snapshot <tab> [--wait-stable <ms>]
 ```
 
 Returns the current visible viewport as plain text. This is not a full scrollback dump.
+
+The default stable wait is currently `150ms`.
+
+### `fetch`
+
+```powershell
+tuiless fetch <tab> [--wait-stable <ms>]
+```
+
+Returns the full plain-text contents currently retained for the tab, including scrollback history rather than only the visible viewport.
+
+This command does not apply any truncation of its own.
 
 The default stable wait is currently `150ms`.
 
@@ -181,7 +197,9 @@ tuiless attach <tab>
 
 Starts a minimal interactive terminal view for a tab. Detach with `Ctrl+]`.
 
-This is currently a rough implementation and needs more validation.
+On start, `attach` syncs the tab to the current terminal size, enters an alternate-screen raw terminal view, enables mouse capture, and forwards keyboard, mouse, and resize events to the tab.
+
+This is currently a polling implementation and still needs broader validation against full-screen TUIs.
 
 ### `list`
 
@@ -200,8 +218,6 @@ tuiless close --all
 
 Closes one tab or shuts down the current workspace runtime.
 
-`close --all` is currently implemented but still needs a cleaner shutdown handshake.
-
 ## Design Notes
 
 The public model is deliberately simple:
@@ -209,6 +225,7 @@ The public model is deliberately simple:
 - a tab is a shell-backed PTY session;
 - terminal size is part of tab state;
 - snapshots are viewport-oriented;
+- fetch returns the retained full text history for a tab;
 - raw input events and convenience actions both exist;
 - higher-level locator APIs such as `click text=Submit` are intentionally out of scope for v0.
 

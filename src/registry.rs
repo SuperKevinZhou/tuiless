@@ -26,7 +26,8 @@ pub fn read_entry(session_key: &str) -> Result<Option<SessionRegistryEntry>> {
     if !path.exists() {
         return Ok(None);
     }
-    let bytes = std::fs::read(&path).with_context(|| format!("failed to read session registry {}", path.display()))?;
+    let bytes = std::fs::read(&path)
+        .with_context(|| format!("failed to read session registry {}", path.display()))?;
     let entry = serde_json::from_slice::<SessionRegistryEntry>(&bytes)
         .with_context(|| format!("failed to decode session registry {}", path.display()))?;
     Ok(Some(entry))

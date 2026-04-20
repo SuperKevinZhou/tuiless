@@ -21,6 +21,7 @@ pub enum Command {
     },
     Open(OpenArgs),
     Snapshot(SnapshotArgs),
+    Fetch(SnapshotArgs),
     Exec(TabLineArgs),
     Type(TabLineArgs),
     Press(PressArgs),

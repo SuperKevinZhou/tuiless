@@ -4,7 +4,9 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEventKind, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind,
+    },
     execute, queue,
     style::Print,
     terminal::{self, Clear, ClearType},
@@ -16,11 +18,26 @@ use crate::{app::RuntimeClient, protocol::ServerResponse};
 pub async fn attach(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> Result<()> {
     let mut stdout = stdout();
     terminal::enable_raw_mode()?;
-    execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
+    execute!(
+        stdout,
+        terminal::EnterAlternateScreen,
+        EnableMouseCapture,
+        cursor::Hide
+    )?;
 
-    let result = attach_loop(client, tab, wait_stable_ms).await;
+    let result = async {
+        let (cols, rows) = terminal::size()?;
+        client.resize(tab, cols, rows).await?;
+        attach_loop(client, tab, wait_stable_ms).await
+    }
+    .await;
 
-    let _ = execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen);
+    let _ = execute!(
+        stdout,
+        cursor::Show,
+        DisableMouseCapture,
+        terminal::LeaveAlternateScreen
+    );
     let _ = terminal::disable_raw_mode();
     result
 }
@@ -32,16 +49,26 @@ async fn attach_loop(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> 
         if event::poll(Duration::from_millis(50))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char(']')) {
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL)
+                        && matches!(key.code, KeyCode::Char(']'))
+                    {
                         break;
                     }
 
                     let spec = crate::protocol::KeySpec {
                         key: KeyCodeSpec::from(key.code),
-                        ctrl: key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL),
+                        ctrl: key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL),
                         alt: key.modifiers.contains(crossterm::event::KeyModifiers::ALT),
-                        shift: key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT),
-                        meta: key.modifiers.contains(crossterm::event::KeyModifiers::SUPER),
+                        shift: key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::SHIFT),
+                        meta: key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::SUPER),
                     };
                     client.press(tab, spec).await?;
                 }
@@ -74,7 +101,7 @@ async fn attach_loop(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> 
                         client
                             .mouse_event(
                                 tab,
-                                MouseEventSpec::Down {
+                                MouseEventSpec::Drag {
                                     x: mouse.column,
                                     y: mouse.row,
                                     button: MouseButtonSpec::from(button),
@@ -135,7 +162,12 @@ async fn render_snapshot(client: &RuntimeClient, tab: &str, wait_stable_ms: u64)
         bail!("unexpected runtime response while attaching");
     };
     let mut stdout = stdout();
-    queue!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All), Print(text))?;
+    queue!(
+        stdout,
+        cursor::MoveTo(0, 0),
+        Clear(ClearType::All),
+        Print(text)
+    )?;
     stdout.flush()?;
     Ok(())
 }
