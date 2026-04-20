@@ -92,9 +92,10 @@ Clean up the runtime:
 
 `tuiless` computes a session key from the canonical current working directory. The first CLI command for that workspace starts a background runtime. Later CLI commands connect to the same runtime and operate on the same tab state.
 
-Runtime state is intentionally workspace-local:
+Runtime state is scoped by workspace session key, while registry metadata lives outside the repo by default:
 
-- registry files live under `.tuiless/`;
+- registry files live under `%LOCALAPPDATA%\tuiless\registry` on Windows;
+- set `TUILESS_REGISTRY_DIR` to override the registry location;
 - tab names are scoped to the current workspace;
 - `tab_1` in one workspace is independent from `tab_1` in another workspace.
 

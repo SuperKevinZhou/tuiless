@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::protocol::SessionRegistryEntry;
 
 pub fn registry_root() -> Result<PathBuf> {
-    let root = std::env::current_dir()?.join(".tuiless");
+    let root = registry_base_dir()?.join("registry");
     std::fs::create_dir_all(&root)?;
     Ok(root)
 }
@@ -52,4 +52,23 @@ pub fn ensure_parent(path: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     Ok(())
+}
+
+fn registry_base_dir() -> Result<PathBuf> {
+    if let Some(override_dir) = std::env::var_os("TUILESS_REGISTRY_DIR") {
+        return Ok(PathBuf::from(override_dir));
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            return Ok(PathBuf::from(local_app_data).join("tuiless"));
+        }
+    }
+
+    if let Some(home) = std::env::var_os("HOME") {
+        return Ok(PathBuf::from(home).join(".tuiless"));
+    }
+
+    std::env::current_dir().context("failed to discover a registry base directory")
 }
