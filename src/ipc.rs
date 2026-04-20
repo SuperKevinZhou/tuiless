@@ -41,7 +41,7 @@ where
     let mut last_error = None;
     for _ in 0..20 {
         match ClientOptions::new()
-            .pipe_mode(PipeMode::Message)
+            .pipe_mode(PipeMode::Byte)
             .open(endpoint)
         {
             Ok(pipe) => {
@@ -101,7 +101,7 @@ fn create_server(
     first_pipe_instance: bool,
 ) -> Result<tokio::net::windows::named_pipe::NamedPipeServer> {
     ServerOptions::new()
-        .pipe_mode(PipeMode::Message)
+        .pipe_mode(PipeMode::Byte)
         .first_pipe_instance(first_pipe_instance)
         .create(endpoint)
         .with_context(|| format!("failed to create pipe server {endpoint}"))

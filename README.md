@@ -234,7 +234,7 @@ The public model is deliberately simple:
 Internally, the current implementation uses:
 
 - `clap` for CLI parsing;
-- `tokio` named pipes for Windows IPC;
+- `tokio` named pipes for Windows IPC with length-prefixed byte-stream framing;
 - `portable-pty` for PTY management;
 - `vt100` for terminal screen parsing;
 - `crossterm` for the minimal attach surface.
