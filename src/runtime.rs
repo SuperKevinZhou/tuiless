@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -50,6 +51,7 @@ struct TabState {
     last_activity_ms: Arc<RwLock<u128>>,
     created_at_ms: u128,
     screen: Arc<RwLock<ScreenBuffer>>,
+    viewport_history: Arc<RwLock<VecDeque<String>>>,
     writer: Arc<tokio::sync::Mutex<Box<dyn std::io::Write + Send>>>,
     _session: Arc<PtySession>,
 }
@@ -148,7 +150,19 @@ async fn handle_request(
         } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             wait_stable(&tab_state, wait_stable_ms).await;
-            let text = tab_state.screen.write().await.full_text();
+            let mut text = tab_state.screen.write().await.full_text();
+            let history = tab_state.viewport_history.read().await;
+            for frame in history.iter() {
+                if frame.trim().is_empty() {
+                    continue;
+                }
+                if !text.contains(frame) {
+                    if !text.is_empty() {
+                        text.push('\n');
+                    }
+                    text.push_str(frame);
+                }
+            }
             Ok(RuntimeReply::continue_with(ServerResponse::FetchText {
                 tab,
                 text,
@@ -252,6 +266,7 @@ async fn ensure_tab(
         last_activity_ms: Arc::new(RwLock::new(created_at)),
         created_at_ms: created_at,
         screen: Arc::clone(&screen),
+        viewport_history: Arc::new(RwLock::new(VecDeque::with_capacity(64))),
         writer: Arc::clone(&session.writer),
         _session: Arc::clone(&session),
     });
@@ -273,6 +288,7 @@ fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()
     let runtime_handle = tokio::runtime::Handle::current();
     let reader = Arc::clone(&session.reader);
     let writer = Arc::clone(&tab_state.writer);
+    let viewport_history = Arc::clone(&tab_state.viewport_history);
 
     std::thread::spawn(move || {
         let mut buffer = [0u8; 4096];
@@ -296,8 +312,19 @@ fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()
                     }
                     let screen = Arc::clone(&screen);
                     let activity = Arc::clone(&activity);
+                    let viewport_history = Arc::clone(&viewport_history);
                     runtime_handle.block_on(async move {
-                        screen.write().await.apply(&owned);
+                        let mut screen = screen.write().await;
+                        screen.apply(&owned);
+                        let frame = screen.viewport_text();
+                        let mut history = viewport_history.write().await;
+                        if history.back().map(|prev| prev != &frame).unwrap_or(true) {
+                            history.push_back(frame);
+                            const MAX_VIEWPORT_HISTORY: usize = 200;
+                            if history.len() > MAX_VIEWPORT_HISTORY {
+                                let _ = history.pop_front();
+                            }
+                        }
                         *activity.write().await = now_ms();
                     });
                 }

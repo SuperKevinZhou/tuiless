@@ -126,6 +126,7 @@ tuiless fetch <tab> [--wait-stable <ms>]
 ```
 
 Returns the full plain-text contents currently retained for the tab, including scrollback history rather than only the visible viewport.
+For fullscreen/alternate-screen TUIs, fetch also keeps a bounded history of distinct viewport frames so state remains inspectable after the TUI exits.
 
 This command does not apply any truncation of its own.
 
