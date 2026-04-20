@@ -221,6 +221,10 @@ tuiless close --all
 
 Closes one tab or shuts down the current workspace runtime.
 
+### Internal Runtime Command
+
+`serve` is an internal background entrypoint used by regular commands to bootstrap the runtime. It is intentionally hidden from top-level CLI help.
+
 ## Design Notes
 
 The public model is deliberately simple:

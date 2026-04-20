@@ -13,6 +13,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    #[command(hide = true)]
     Serve {
         #[arg(long)]
         session_key: String,
