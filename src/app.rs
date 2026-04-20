@@ -229,13 +229,14 @@ pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
                 .await?;
         }
         cli::Command::Wheel(args) => {
+            let delta_y = args.delta_y()?;
             client
                 .mouse_event(
                     &args.tab,
                     MouseEventSpec::Wheel {
                         x: args.x,
                         y: args.y,
-                        delta_y: args.delta_y,
+                        delta_y,
                     },
                 )
                 .await?;

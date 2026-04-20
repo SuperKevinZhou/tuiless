@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(name = "tuiless")]
@@ -109,12 +109,18 @@ pub struct DragArgs {
 #[derive(Args, Debug)]
 pub struct WheelArgs {
     pub tab: String,
-    #[arg(long = "delta-y")]
-    pub delta_y: i16,
+    #[arg(long = "delta-y", action = ArgAction::Set)]
+    delta_y_raw: String,
     #[arg(long)]
     pub x: Option<u16>,
     #[arg(long)]
     pub y: Option<u16>,
+}
+
+impl WheelArgs {
+    pub fn delta_y(&self) -> anyhow::Result<i16> {
+        Ok(self.delta_y_raw.trim().parse::<i16>()?)
+    }
 }
 
 #[derive(Args, Debug)]

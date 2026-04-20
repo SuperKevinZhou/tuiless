@@ -180,6 +180,7 @@ tuiless mouse-move <tab> --x <col> --y <row>
 ```
 
 These commands guarantee event injection only. Whether the target application reacts depends on terminal mouse reporting support.
+For negative wheel values, both `--delta-y -3` and `--delta-y=-3` are accepted.
 
 ### `resize`
 
