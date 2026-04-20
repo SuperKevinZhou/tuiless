@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, stdin};
 use std::io::{Write, stdout};
 use std::time::Duration;
 
@@ -15,7 +16,16 @@ use crossterm::{
 use crate::protocol::{KeyCodeSpec, MouseButtonSpec, MouseEventSpec};
 use crate::{app::RuntimeClient, protocol::ServerResponse};
 
+pub fn ensure_interactive_terminal() -> Result<()> {
+    if !stdin().is_terminal() || !stdout().is_terminal() {
+        bail!("attach requires an interactive terminal (TTY stdin/stdout)");
+    }
+    Ok(())
+}
+
 pub async fn attach(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> Result<()> {
+    ensure_interactive_terminal()?;
+
     let mut stdout = stdout();
     terminal::enable_raw_mode()?;
     execute!(

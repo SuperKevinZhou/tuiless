@@ -200,6 +200,7 @@ tuiless attach <tab>
 Starts a minimal interactive terminal view for a tab. Detach with `Ctrl+]`.
 
 On start, `attach` syncs the tab to the current terminal size, enters an alternate-screen raw terminal view, enables mouse capture, and forwards keyboard, mouse, and resize events to the tab.
+`attach` requires an interactive TTY for both stdin and stdout; in non-interactive environments it now fails fast without mutating tab state.
 
 This is currently a polling implementation and still needs broader validation against full-screen TUIs.
 
