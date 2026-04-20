@@ -1,15 +1,16 @@
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::Mutex;
 
 pub struct PtySession {
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub reader: Arc<Mutex<Box<dyn Read + Send>>>,
-    master: Mutex<Box<dyn MasterPty + Send>>,
+    master: StdMutex<Box<dyn MasterPty + Send>>,
 }
 
 impl PtySession {
@@ -32,12 +33,16 @@ impl PtySession {
         Ok(Self {
             writer: Arc::new(Mutex::new(writer)),
             reader: Arc::new(Mutex::new(reader)),
-            master: Mutex::new(pair.master),
+            master: StdMutex::new(pair.master),
         })
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<()> {
-        self.master.blocking_lock().resize(PtySize {
+        let master = self
+            .master
+            .lock()
+            .map_err(|_| anyhow!("pty master lock poisoned"))?;
+        master.resize(PtySize {
             rows,
             cols,
             pixel_width: 0,
