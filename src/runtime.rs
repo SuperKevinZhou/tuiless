@@ -56,6 +56,8 @@ struct TabState {
     _session: Arc<PtySession>,
 }
 
+const MAX_VIEWPORT_HISTORY: usize = 200;
+
 pub async fn serve(session_key: String, cwd: PathBuf) -> Result<()> {
     let endpoint = ipc::pipe_name(&session_key);
 
@@ -322,7 +324,6 @@ fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()
                         let mut history = viewport_history.write().await;
                         if history.back().map(|prev| prev != &frame).unwrap_or(true) {
                             history.push_back(frame);
-                            const MAX_VIEWPORT_HISTORY: usize = 200;
                             if history.len() > MAX_VIEWPORT_HISTORY {
                                 let _ = history.pop_front();
                             }
@@ -356,5 +357,24 @@ async fn wait_stable(tab: &TabState, wait_stable_ms: u64) {
         if before == after {
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_VIEWPORT_HISTORY, VecDeque};
+
+    #[test]
+    fn viewport_history_is_bounded() {
+        let mut history = VecDeque::with_capacity(MAX_VIEWPORT_HISTORY);
+        for i in 0..(MAX_VIEWPORT_HISTORY + 25) {
+            history.push_back(format!("frame-{i}"));
+            if history.len() > MAX_VIEWPORT_HISTORY {
+                let _ = history.pop_front();
+            }
+        }
+
+        assert_eq!(history.len(), MAX_VIEWPORT_HISTORY);
+        assert_eq!(history.front().map(String::as_str), Some("frame-25"));
     }
 }
