@@ -36,6 +36,7 @@ pub enum Command {
     Attach(AttachArgs),
     List,
     Close(CloseArgs),
+    Skill(SkillArgs),
 }
 
 #[derive(Args, Debug)]
@@ -181,6 +182,12 @@ pub struct CloseArgs {
     pub all: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct SkillArgs {
+    #[arg(long)]
+    pub path: PathBuf,
+}
+
 impl Cli {
     pub fn parse_from_env() -> Result<Self> {
         Ok(Self::parse())
@@ -206,6 +213,8 @@ fn parse_snapshot_theme(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use clap::Parser;
 
     use super::{Cli, Command, SnapshotColorCli};
@@ -314,5 +323,15 @@ mod tests {
         };
         assert_eq!(args.tab, "demo");
         assert_eq!(args.wait_stable_ms, 220);
+    }
+
+    #[test]
+    fn skill_command_parses_path_argument() {
+        let parsed = Cli::try_parse_from(["tuiless", "skill", "--path", "C:\\tmp\\skills"])
+            .expect("skill command should parse");
+        let Command::Skill(args) = parsed.command else {
+            panic!("expected skill command");
+        };
+        assert_eq!(args.path, PathBuf::from("C:\\tmp\\skills"));
     }
 }

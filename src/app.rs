@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 use std::time::Duration;
 
@@ -17,6 +17,27 @@ use crate::session::{canonical_session_key, normalize_cwd};
 pub struct RuntimeClient {
     endpoint: String,
 }
+
+const SKILL_NAME: &str = "tuiless";
+const SKILL_FILES: &[(&str, &str)] = &[
+    ("SKILL.md", include_str!("../skills/tuiless/SKILL.md")),
+    (
+        "agents/openai.yaml",
+        include_str!("../skills/tuiless/agents/openai.yaml"),
+    ),
+    (
+        "references/basic-usage.md",
+        include_str!("../skills/tuiless/references/basic-usage.md"),
+    ),
+    (
+        "references/detailed-documentation.md",
+        include_str!("../skills/tuiless/references/detailed-documentation.md"),
+    ),
+    (
+        "references/best-practices.md",
+        include_str!("../skills/tuiless/references/best-practices.md"),
+    ),
+];
 
 impl RuntimeClient {
     async fn send(&self, request: &ClientRequest) -> Result<ServerResponse> {
@@ -164,6 +185,13 @@ impl RuntimeClient {
 
 pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
     let cwd = normalize_cwd(&cwd)?;
+
+    if let cli::Command::Skill(args) = &command {
+        let installed_path = install_skill_folder(&args.path)?;
+        println!("{}", installed_path.display());
+        return Ok(());
+    }
+
     let session_key = canonical_session_key(&cwd)?;
     let client = ensure_runtime(&cwd, &session_key).await?;
 
@@ -335,6 +363,7 @@ pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
                 bail!("close requires either a tab name or --all");
             }
         }
+        cli::Command::Skill { .. } => unreachable!("skill is handled before runtime setup"),
         cli::Command::Serve { .. } => unreachable!("serve is handled before app::run"),
     }
 
@@ -438,6 +467,45 @@ fn expect_ok(response: ServerResponse) -> Result<()> {
     }
 }
 
+fn install_skill_folder(destination_root: &Path) -> Result<PathBuf> {
+    if destination_root.exists() && !destination_root.is_dir() {
+        bail!(
+            "skill destination root is not a directory: {}",
+            destination_root.display()
+        );
+    }
+    std::fs::create_dir_all(destination_root).with_context(|| {
+        format!(
+            "failed to create skill destination root {}",
+            destination_root.display()
+        )
+    })?;
+
+    let skill_dir = destination_root.join(SKILL_NAME);
+    if skill_dir.exists() {
+        bail!(
+            "skill destination already exists: {}",
+            skill_dir.as_path().display()
+        );
+    }
+
+    for (relative_path, content) in SKILL_FILES {
+        let output_path = skill_dir.join(relative_path);
+        if let Some(parent) = output_path.parent() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "failed to create directory {}",
+                    parent.as_os_str().to_string_lossy()
+                )
+            })?;
+        }
+        std::fs::write(&output_path, content)
+            .with_context(|| format!("failed to write skill file {}", output_path.display()))?;
+    }
+
+    Ok(skill_dir)
+}
+
 fn interpolate_points(from_x: u16, from_y: u16, to_x: u16, to_y: u16) -> Vec<(u16, u16)> {
     let steps = u16::max(from_x.abs_diff(to_x), from_y.abs_diff(to_y)).max(1);
     (1..steps)
@@ -447,4 +515,47 @@ fn interpolate_points(from_x: u16, from_y: u16, to_x: u16, to_y: u16) -> Vec<(u1
             (x as u16, y as u16)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{SKILL_FILES, SKILL_NAME, install_skill_folder};
+
+    fn unique_temp_dir(suffix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "tuiless-skill-install-{suffix}-{}-{nanos}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn install_skill_folder_copies_all_embedded_files() {
+        let root = unique_temp_dir("copy");
+        let skill_dir = install_skill_folder(&root).expect("skill install should succeed");
+        assert_eq!(skill_dir, root.join(SKILL_NAME));
+
+        for (relative_path, content) in SKILL_FILES {
+            let written = std::fs::read_to_string(skill_dir.join(relative_path))
+                .expect("skill file should be written");
+            assert_eq!(written, *content);
+        }
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn install_skill_folder_errors_when_destination_exists() {
+        let root = unique_temp_dir("exists");
+        install_skill_folder(&root).expect("first install should succeed");
+        let second = install_skill_folder(&root);
+        assert!(second.is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

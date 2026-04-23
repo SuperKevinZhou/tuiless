@@ -23,7 +23,8 @@ Working core path:
 - capture the current viewport with `snapshot`;
 - fetch the full terminal text history with `fetch`;
 - resize a tab;
-- list open tabs.
+- list open tabs;
+- install the bundled `tuiless` Codex skill with `skill --path`.
 
 Known rough edges:
 
@@ -86,6 +87,12 @@ Clean up the runtime:
 
 ```powershell
 .\target\debug\tuiless.exe close --all
+```
+
+Install the bundled `tuiless` skill to a local skills directory:
+
+```powershell
+.\target\debug\tuiless.exe skill --path "$env:USERPROFILE\.codex\skills"
 ```
 
 ## Runtime Model
@@ -222,6 +229,15 @@ tuiless close --all
 ```
 
 Closes one tab or shuts down the current workspace runtime.
+
+### `skill`
+
+```powershell
+tuiless skill --path <path-to-skills-directory>
+```
+
+Copies the bundled `skills/tuiless` package into `<path-to-skills-directory>\tuiless`.
+This command is local-only and does not start or use the tab runtime.
 
 ### Internal Runtime Command
 
