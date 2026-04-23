@@ -1,0 +1,4 @@
+interface:
+  display_name: "tuiless"
+  short_description: "Stateful terminal automation CLI for Windows workflows."
+  default_prompt: "Use this skill when operating or validating the tuiless CLI, including runtime bootstrapping, tab control, snapshot/fetch behavior, and Windows-specific best practices."
