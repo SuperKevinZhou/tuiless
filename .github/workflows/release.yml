@@ -45,17 +45,16 @@ jobs:
             $header = "Changes from $previousTag to $tag"
           }
 
-          $commitNotes = git log $logRange --pretty=format:"- %H %s"
+          $commitNotes = @(git log $logRange --pretty=format:"- %H %s")
           if (-not $commitNotes) {
-            $commitNotes = "- No commit entries found in range."
+            $commitNotes = @("- No commit entries found in range.")
           }
 
           $notesPath = Join-Path $env:RUNNER_TEMP "release_notes.md"
           $notesLines = @(
             "## $header"
             ""
-            "$commitNotes"
-          )
+          ) + $commitNotes
           $notesLines | Set-Content -Path $notesPath -Encoding utf8
 
           "notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
