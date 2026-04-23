@@ -65,7 +65,7 @@ This file tracks the remaining work to complete the v0 plan.
 
 ## Attach
 
-- [ ] Replace the current polling attach loop with a better event/update model.
+- [x] Replace the current attach loop with an event-priority update model and ANSI frame rendering.
 - [x] Forward keyboard input from raw mode.
 - [x] Forward terminal resize events.
 - [x] Forward mouse events in attach mode.

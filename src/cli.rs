@@ -170,7 +170,7 @@ pub struct ResizeArgs {
 #[derive(Args, Debug)]
 pub struct AttachArgs {
     pub tab: String,
-    #[arg(long = "wait-stable", default_value_t = crate::protocol::DEFAULT_WAIT_STABLE_MS)]
+    #[arg(long = "wait-stable", default_value_t = 1)]
     pub wait_stable_ms: u64,
 }
 

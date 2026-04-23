@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use crate::ipc;
 use crate::protocol::{
     ClientRequest, DEFAULT_COLS, DEFAULT_ROWS, KeySpec, ServerResponse, SessionRegistryEntry,
-    SnapshotColorMetadata, TabSummary, now_ms,
+    SnapshotColorMetadata, SnapshotRenderMode, TabSummary, now_ms,
 };
 use crate::registry;
 use crate::screen::ScreenBuffer;
@@ -134,6 +134,7 @@ async fn handle_request(
             tab,
             wait_stable_ms,
             color,
+            render,
         } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             wait_stable(&tab_state, wait_stable_ms).await;
@@ -145,6 +146,8 @@ async fn handle_request(
                     .read()
                     .await
                     .viewport_color_text(color_request.mode, color_request.theme)?
+            } else if render == SnapshotRenderMode::Ansi {
+                tab_state.screen.read().await.viewport_ansi_text()
             } else {
                 tab_state.screen.read().await.viewport_text()
             };

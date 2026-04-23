@@ -37,6 +37,13 @@ impl SnapshotColorMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SnapshotRenderMode {
+    #[default]
+    PlainText,
+    Ansi,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SnapshotTheme {
     Dimidium,
@@ -247,6 +254,8 @@ pub enum ClientRequest {
         tab: String,
         wait_stable_ms: u64,
         color: Option<SnapshotColorRequest>,
+        #[serde(default)]
+        render: SnapshotRenderMode,
     },
     Fetch {
         tab: String,
@@ -712,5 +721,17 @@ mod tests {
     fn parse_space_key_alias() {
         let spec = parse_key_spec("Space", &ModifierFlags::empty()).unwrap();
         assert_eq!(spec.key, KeyCodeSpec::Char(' '));
+    }
+
+    #[test]
+    fn snapshot_request_defaults_to_plain_text_render_mode_when_omitted() {
+        let request: ClientRequest =
+            serde_json::from_str(r#"{"Snapshot":{"tab":"demo","wait_stable_ms":1,"color":null}}"#)
+                .unwrap();
+
+        let ClientRequest::Snapshot { render, .. } = request else {
+            panic!("expected snapshot request");
+        };
+        assert_eq!(render, SnapshotRenderMode::PlainText);
     }
 }

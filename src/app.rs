@@ -9,7 +9,7 @@ use crate::cli;
 use crate::ipc;
 use crate::protocol::{
     ClientRequest, KeySpec, ModifierFlags, MouseButtonSpec, MouseEventSpec, ServerResponse,
-    SnapshotColorRequest, SnapshotTheme, parse_key_spec,
+    SnapshotColorRequest, SnapshotRenderMode, SnapshotTheme, parse_key_spec,
 };
 use crate::registry;
 use crate::session::{canonical_session_key, normalize_cwd};
@@ -39,11 +39,13 @@ impl RuntimeClient {
         tab: &str,
         wait_stable_ms: u64,
         color: Option<SnapshotColorRequest>,
+        render: SnapshotRenderMode,
     ) -> Result<ServerResponse> {
         self.send(&ClientRequest::Snapshot {
             tab: tab.to_string(),
             wait_stable_ms,
             color,
+            render,
         })
         .await
     }
@@ -62,7 +64,20 @@ impl RuntimeClient {
         wait_stable_ms: u64,
         color: Option<SnapshotColorRequest>,
     ) -> Result<String> {
-        match self.snapshot_raw(tab, wait_stable_ms, color).await? {
+        match self
+            .snapshot_raw(tab, wait_stable_ms, color, SnapshotRenderMode::PlainText)
+            .await?
+        {
+            ServerResponse::SnapshotText { text, .. } => Ok(text),
+            other => bail!("unexpected snapshot response: {other:?}"),
+        }
+    }
+
+    pub async fn snapshot_ansi_text(&self, tab: &str, wait_stable_ms: u64) -> Result<String> {
+        match self
+            .snapshot_raw(tab, wait_stable_ms, None, SnapshotRenderMode::Ansi)
+            .await?
+        {
             ServerResponse::SnapshotText { text, .. } => Ok(text),
             other => bail!("unexpected snapshot response: {other:?}"),
         }

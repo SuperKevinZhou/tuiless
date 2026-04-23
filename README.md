@@ -28,7 +28,7 @@ Working core path:
 Known rough edges:
 
 - Windows is the only currently implemented IPC target.
-- `attach` exists as a minimal polling-based interactive view and still needs broader real-TUI testing.
+- `attach` now restores ANSI colors and uses an event-priority refresh loop, but still needs broader real-TUI validation.
 - mouse commands inject terminal mouse escape sequences, but target applications must enable mouse reporting.
 - integration tests are not yet complete.
 
@@ -195,15 +195,16 @@ Updates the tab's simulated terminal size.
 ### `attach`
 
 ```powershell
-tuiless attach <tab>
+tuiless attach <tab> [--wait-stable <ms>]
 ```
 
 Starts a minimal interactive terminal view for a tab. Detach with `Ctrl+]`.
 
-On start, `attach` syncs the tab to the current terminal size, enters an alternate-screen raw terminal view, enables mouse capture, and forwards keyboard, mouse, and resize events to the tab.
+On start, `attach` syncs the tab to the current terminal size, fetches an ANSI-formatted frame, enters an alternate-screen raw terminal view, enables mouse capture, and forwards keyboard, mouse, and resize events to the tab.
 `attach` requires an interactive TTY for both stdin and stdout; in non-interactive environments it now fails fast without mutating tab state.
+`--wait-stable` applies to the initial frame only (default `1ms`), so live input stays responsive.
 
-This is currently a polling implementation and still needs broader validation against full-screen TUIs.
+Runtime updates use ANSI snapshots and skip unchanged frames to reduce flicker, while keeping `snapshot`/`fetch` as plain-text outputs for automation.
 
 ### `list`
 

@@ -35,6 +35,11 @@ impl ScreenBuffer {
         self.parser.screen().contents()
     }
 
+    pub fn viewport_ansi_text(&self) -> String {
+        let formatted = self.parser.screen().state_formatted();
+        String::from_utf8_lossy(&formatted).into_owned()
+    }
+
     pub fn viewport_color_text(
         &self,
         mode: SnapshotColorMode,
@@ -334,6 +339,16 @@ mod tests {
         screen.apply(b"line1\r\nline2\r\nline3");
         assert_eq!(screen.viewport_text(), "line2\nline3");
         assert_eq!(screen.full_text(), "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn viewport_ansi_text_contains_escape_sequences_for_styles() {
+        let mut screen = ScreenBuffer::new(2, 1);
+        screen.apply(b"\x1b[31mA");
+        let output = screen.viewport_ansi_text();
+
+        assert!(output.contains('A'));
+        assert!(output.contains("\u{1b}["));
     }
 
     #[test]
