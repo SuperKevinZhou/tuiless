@@ -167,7 +167,7 @@ async fn attach_loop(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> 
 }
 
 async fn render_snapshot(client: &RuntimeClient, tab: &str, wait_stable_ms: u64) -> Result<()> {
-    let response = client.snapshot_raw(tab, wait_stable_ms).await?;
+    let response = client.snapshot_raw(tab, wait_stable_ms, None).await?;
     let ServerResponse::SnapshotText { text, .. } = response else {
         bail!("unexpected runtime response while attaching");
     };

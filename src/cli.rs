@@ -22,7 +22,7 @@ pub enum Command {
     },
     Open(OpenArgs),
     Snapshot(SnapshotArgs),
-    Fetch(SnapshotArgs),
+    Fetch(FetchArgs),
     Exec(TabLineArgs),
     Type(TabLineArgs),
     Press(PressArgs),
@@ -49,6 +49,17 @@ pub struct OpenArgs {
 
 #[derive(Args, Debug)]
 pub struct SnapshotArgs {
+    pub tab: String,
+    #[arg(long = "wait-stable", default_value_t = crate::protocol::DEFAULT_WAIT_STABLE_MS)]
+    pub wait_stable_ms: u64,
+    #[arg(long)]
+    pub color: Option<SnapshotColorCli>,
+    #[arg(long, requires = "color", value_parser = parse_snapshot_theme)]
+    pub theme: Option<crate::protocol::SnapshotTheme>,
+}
+
+#[derive(Args, Debug)]
+pub struct FetchArgs {
     pub tab: String,
     #[arg(long = "wait-stable", default_value_t = crate::protocol::DEFAULT_WAIT_STABLE_MS)]
     pub wait_stable_ms: u64,
@@ -79,6 +90,15 @@ pub enum MouseButtonCli {
     Left,
     Right,
     Middle,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum SnapshotColorCli {
+    Smart,
+    Foreground,
+    Background,
+    #[value(name = "foreground,background")]
+    ForegroundBackground,
 }
 
 #[derive(Args, Debug)]
@@ -164,5 +184,135 @@ pub struct CloseArgs {
 impl Cli {
     pub fn parse_from_env() -> Result<Self> {
         Ok(Self::parse())
+    }
+}
+
+impl From<SnapshotColorCli> for crate::protocol::SnapshotColorMode {
+    fn from(value: SnapshotColorCli) -> Self {
+        match value {
+            SnapshotColorCli::Smart => Self::Smart,
+            SnapshotColorCli::Foreground => Self::Foreground,
+            SnapshotColorCli::Background => Self::Background,
+            SnapshotColorCli::ForegroundBackground => Self::ForegroundBackground,
+        }
+    }
+}
+
+fn parse_snapshot_theme(
+    input: &str,
+) -> std::result::Result<crate::protocol::SnapshotTheme, String> {
+    crate::protocol::SnapshotTheme::parse_cli_name(input).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::{Cli, Command, SnapshotColorCli};
+    use crate::protocol::SnapshotTheme;
+
+    #[test]
+    fn snapshot_color_modes_parse() {
+        let smart = Cli::try_parse_from(["tuiless", "snapshot", "demo", "--color", "smart"])
+            .expect("smart should parse");
+        let fg = Cli::try_parse_from(["tuiless", "snapshot", "demo", "--color", "foreground"])
+            .expect("foreground should parse");
+        let bg = Cli::try_parse_from(["tuiless", "snapshot", "demo", "--color", "background"])
+            .expect("background should parse");
+        let both = Cli::try_parse_from([
+            "tuiless",
+            "snapshot",
+            "demo",
+            "--color",
+            "foreground,background",
+        ])
+        .expect("foreground,background should parse");
+
+        let Command::Snapshot(smart_args) = smart.command else {
+            panic!("expected snapshot command");
+        };
+        assert!(matches!(smart_args.color, Some(SnapshotColorCli::Smart)));
+        assert_eq!(smart_args.theme, None);
+
+        let Command::Snapshot(fg_args) = fg.command else {
+            panic!("expected snapshot command");
+        };
+        assert!(matches!(fg_args.color, Some(SnapshotColorCli::Foreground)));
+
+        let Command::Snapshot(bg_args) = bg.command else {
+            panic!("expected snapshot command");
+        };
+        assert!(matches!(bg_args.color, Some(SnapshotColorCli::Background)));
+
+        let Command::Snapshot(both_args) = both.command else {
+            panic!("expected snapshot command");
+        };
+        assert!(matches!(
+            both_args.color,
+            Some(SnapshotColorCli::ForegroundBackground)
+        ));
+    }
+
+    #[test]
+    fn snapshot_invalid_color_or_empty_value_errors() {
+        let invalid = Cli::try_parse_from(["tuiless", "snapshot", "demo", "--color", "invalid"]);
+        assert!(invalid.is_err());
+
+        let empty = Cli::try_parse_from(["tuiless", "snapshot", "demo", "--color", ""]);
+        assert!(empty.is_err());
+    }
+
+    #[test]
+    fn snapshot_repeated_color_is_invalid() {
+        let repeated = Cli::try_parse_from([
+            "tuiless",
+            "snapshot",
+            "demo",
+            "--color",
+            "smart",
+            "--color",
+            "foreground",
+        ]);
+        assert!(repeated.is_err());
+    }
+
+    #[test]
+    fn snapshot_theme_defaults_and_parses() {
+        let with_theme = Cli::try_parse_from([
+            "tuiless",
+            "snapshot",
+            "demo",
+            "--color",
+            "foreground",
+            "--theme",
+            "One Half Dark",
+        ])
+        .expect("theme should parse");
+        let Command::Snapshot(args) = with_theme.command else {
+            panic!("expected snapshot command");
+        };
+        assert_eq!(args.theme, Some(SnapshotTheme::OneHalfDark));
+
+        let invalid = Cli::try_parse_from([
+            "tuiless",
+            "snapshot",
+            "demo",
+            "--color",
+            "foreground",
+            "--theme",
+            "Unknown Theme",
+        ]);
+        assert!(invalid.is_err());
+    }
+
+    #[test]
+    fn fetch_keeps_snapshot_wait_stable_shape_without_color_flags() {
+        let parsed =
+            Cli::try_parse_from(["tuiless", "fetch", "demo", "--wait-stable", "220"]).unwrap();
+        let Command::Fetch(args) = parsed.command else {
+            panic!("expected fetch command");
+        };
+        assert_eq!(args.tab, "demo");
+        assert_eq!(args.wait_stable_ms, 220);
     }
 }

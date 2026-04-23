@@ -9,7 +9,7 @@ use crate::cli;
 use crate::ipc;
 use crate::protocol::{
     ClientRequest, KeySpec, ModifierFlags, MouseButtonSpec, MouseEventSpec, ServerResponse,
-    parse_key_spec,
+    SnapshotColorRequest, SnapshotTheme, parse_key_spec,
 };
 use crate::registry;
 use crate::session::{canonical_session_key, normalize_cwd};
@@ -34,10 +34,16 @@ impl RuntimeClient {
         )
     }
 
-    pub async fn snapshot_raw(&self, tab: &str, wait_stable_ms: u64) -> Result<ServerResponse> {
+    pub async fn snapshot_raw(
+        &self,
+        tab: &str,
+        wait_stable_ms: u64,
+        color: Option<SnapshotColorRequest>,
+    ) -> Result<ServerResponse> {
         self.send(&ClientRequest::Snapshot {
             tab: tab.to_string(),
             wait_stable_ms,
+            color,
         })
         .await
     }
@@ -50,8 +56,13 @@ impl RuntimeClient {
         .await
     }
 
-    pub async fn snapshot_text(&self, tab: &str, wait_stable_ms: u64) -> Result<String> {
-        match self.snapshot_raw(tab, wait_stable_ms).await? {
+    pub async fn snapshot_text(
+        &self,
+        tab: &str,
+        wait_stable_ms: u64,
+        color: Option<SnapshotColorRequest>,
+    ) -> Result<String> {
+        match self.snapshot_raw(tab, wait_stable_ms, color).await? {
             ServerResponse::SnapshotText { text, .. } => Ok(text),
             other => bail!("unexpected snapshot response: {other:?}"),
         }
@@ -146,7 +157,13 @@ pub async fn run(command: cli::Command, cwd: PathBuf) -> Result<()> {
             client.open(&args.tab, args.cols, args.rows).await?;
         }
         cli::Command::Snapshot(args) => {
-            let text = client.snapshot_text(&args.tab, args.wait_stable_ms).await?;
+            let color = args.color.map(|mode| SnapshotColorRequest {
+                mode: mode.into(),
+                theme: args.theme.unwrap_or_else(SnapshotTheme::default_theme),
+            });
+            let text = client
+                .snapshot_text(&args.tab, args.wait_stable_ms, color)
+                .await?;
             print!("{text}");
         }
         cli::Command::Fetch(args) => {

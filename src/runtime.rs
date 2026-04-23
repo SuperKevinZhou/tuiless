@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use crate::ipc;
 use crate::protocol::{
     ClientRequest, DEFAULT_COLS, DEFAULT_ROWS, KeySpec, ServerResponse, SessionRegistryEntry,
-    TabSummary, now_ms,
+    SnapshotColorMetadata, TabSummary, now_ms,
 };
 use crate::registry;
 use crate::screen::ScreenBuffer;
@@ -133,17 +133,30 @@ async fn handle_request(
         ClientRequest::Snapshot {
             tab,
             wait_stable_ms,
+            color,
         } => {
             let tab_state = ensure_tab(&state, &tab, DEFAULT_COLS, DEFAULT_ROWS).await?;
             wait_stable(&tab_state, wait_stable_ms).await;
             let cols = *tab_state.cols.read().await;
             let rows = *tab_state.rows.read().await;
-            let text = tab_state.screen.read().await.viewport_text();
+            let text = if let Some(color_request) = color {
+                tab_state
+                    .screen
+                    .read()
+                    .await
+                    .viewport_color_text(color_request.mode, color_request.theme)?
+            } else {
+                tab_state.screen.read().await.viewport_text()
+            };
             Ok(RuntimeReply::continue_with(ServerResponse::SnapshotText {
                 tab,
                 cols,
                 rows,
                 text,
+                color: color.map(|request| SnapshotColorMetadata {
+                    mode: request.mode,
+                    theme: request.theme,
+                }),
             }))
         }
         ClientRequest::Fetch {

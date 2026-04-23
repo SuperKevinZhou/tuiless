@@ -9,6 +9,212 @@ pub const DEFAULT_COLS: u16 = 80;
 pub const DEFAULT_ROWS: u16 = 24;
 pub const DEFAULT_WAIT_STABLE_MS: u64 = 150;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotColorMode {
+    Smart,
+    Foreground,
+    Background,
+    ForegroundBackground,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotColorLayer {
+    Foreground,
+    Background,
+}
+
+impl SnapshotColorMode {
+    pub fn ordered_layers(self) -> &'static [SnapshotColorLayer] {
+        match self {
+            SnapshotColorMode::Smart => &[SnapshotColorLayer::Foreground],
+            SnapshotColorMode::Foreground => &[SnapshotColorLayer::Foreground],
+            SnapshotColorMode::Background => &[SnapshotColorLayer::Background],
+            SnapshotColorMode::ForegroundBackground => &[
+                SnapshotColorLayer::Foreground,
+                SnapshotColorLayer::Background,
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotTheme {
+    Dimidium,
+    Ottosson,
+    Campbell,
+    CampbellPowershell,
+    Vintage,
+    OneHalfDark,
+    OneHalfLight,
+    SolarizedDark,
+    SolarizedLight,
+    TangoDark,
+    TangoLight,
+    DarkPlus,
+    Cga,
+    Ibm5153,
+}
+
+impl SnapshotTheme {
+    pub fn default_theme() -> Self {
+        Self::OneHalfDark
+    }
+
+    pub fn parse_cli_name(input: &str) -> Result<Self> {
+        let normalized = normalize_theme_name(input);
+        let theme = match normalized.as_str() {
+            "dimidium" => Self::Dimidium,
+            "ottosson" => Self::Ottosson,
+            "campbell" => Self::Campbell,
+            "campbellpowershell" => Self::CampbellPowershell,
+            "vintage" => Self::Vintage,
+            "onehalfdark" => Self::OneHalfDark,
+            "onehalflight" => Self::OneHalfLight,
+            "solarizeddark" => Self::SolarizedDark,
+            "solarizedlight" => Self::SolarizedLight,
+            "tangodark" => Self::TangoDark,
+            "tangolight" => Self::TangoLight,
+            "darkplus" => Self::DarkPlus,
+            "cga" => Self::Cga,
+            "ibm5153" => Self::Ibm5153,
+            _ => {
+                bail!(
+                    "unsupported theme `{input}`; supported themes: {}",
+                    Self::all_theme_names().join(", ")
+                );
+            }
+        };
+        Ok(theme)
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Dimidium => "Dimidium",
+            Self::Ottosson => "Ottosson",
+            Self::Campbell => "Campbell",
+            Self::CampbellPowershell => "Campbell Powershell",
+            Self::Vintage => "Vintage",
+            Self::OneHalfDark => "One Half Dark",
+            Self::OneHalfLight => "One Half Light",
+            Self::SolarizedDark => "Solarized Dark",
+            Self::SolarizedLight => "Solarized Light",
+            Self::TangoDark => "Tango Dark",
+            Self::TangoLight => "Tango Light",
+            Self::DarkPlus => "Dark+",
+            Self::Cga => "CGA",
+            Self::Ibm5153 => "IBM 5153",
+        }
+    }
+
+    pub fn all_theme_names() -> Vec<&'static str> {
+        vec![
+            Self::Dimidium.display_name(),
+            Self::Ottosson.display_name(),
+            Self::Campbell.display_name(),
+            Self::CampbellPowershell.display_name(),
+            Self::Vintage.display_name(),
+            Self::OneHalfDark.display_name(),
+            Self::OneHalfLight.display_name(),
+            Self::SolarizedDark.display_name(),
+            Self::SolarizedLight.display_name(),
+            Self::TangoDark.display_name(),
+            Self::TangoLight.display_name(),
+            Self::DarkPlus.display_name(),
+            Self::Cga.display_name(),
+            Self::Ibm5153.display_name(),
+        ]
+    }
+
+    pub fn ansi16_hex(self, slot: u8) -> Option<&'static str> {
+        let table = match self {
+            Self::Dimidium => &[
+                "#000000", "#CF494C", "#60B442", "#DB9C11", "#0575D8", "#AF5ED2", "#1DB6BB",
+                "#BAB7B6", "#817E7E", "#FF643B", "#37E57B", "#FCCD1A", "#688DFD", "#ED6FE9",
+                "#32E0FB", "#DEE3E4",
+            ],
+            Self::Ottosson => &[
+                "#000000", "#be2c21", "#3fae3a", "#be9a4a", "#204dbe", "#bb54be", "#00a7b2",
+                "#bebebe", "#808080", "#ff3e30", "#58ea51", "#ffc944", "#2f6aff", "#fc74ff",
+                "#00e1f0", "#ffffff",
+            ],
+            Self::Campbell => &[
+                "#0C0C0C", "#C50F1F", "#13A10E", "#C19C00", "#0037DA", "#881798", "#3A96DD",
+                "#CCCCCC", "#767676", "#E74856", "#16C60C", "#F9F1A5", "#3B78FF", "#B4009E",
+                "#61D6D6", "#F2F2F2",
+            ],
+            Self::CampbellPowershell => &[
+                "#0C0C0C", "#C50F1F", "#13A10E", "#C19C00", "#0037DA", "#881798", "#3A96DD",
+                "#CCCCCC", "#767676", "#E74856", "#16C60C", "#F9F1A5", "#3B78FF", "#B4009E",
+                "#61D6D6", "#F2F2F2",
+            ],
+            Self::Vintage => &[
+                "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080",
+                "#C0C0C0", "#808080", "#FF0000", "#00FF00", "#FFFF00", "#0000FF", "#FF00FF",
+                "#00FFFF", "#FFFFFF",
+            ],
+            Self::OneHalfDark => &[
+                "#282C34", "#E06C75", "#98C379", "#E5C07B", "#61AFEF", "#C678DD", "#56B6C2",
+                "#DCDFE4", "#5A6374", "#E06C75", "#98C379", "#E5C07B", "#61AFEF", "#C678DD",
+                "#56B6C2", "#DCDFE4",
+            ],
+            Self::OneHalfLight => &[
+                "#383A42", "#E45649", "#50A14F", "#C18301", "#0184BC", "#A626A4", "#0997B3",
+                "#FAFAFA", "#4F525D", "#DF6C75", "#98C379", "#E4C07A", "#61AFEF", "#C577DD",
+                "#56B5C1", "#FFFFFF",
+            ],
+            Self::SolarizedDark => &[
+                "#002B36", "#DC322F", "#859900", "#B58900", "#268BD2", "#D33682", "#2AA198",
+                "#EEE8D5", "#073642", "#CB4B16", "#586E75", "#657B83", "#839496", "#6C71C4",
+                "#93A1A1", "#FDF6E3",
+            ],
+            Self::SolarizedLight => &[
+                "#002B36", "#DC322F", "#859900", "#B58900", "#268BD2", "#D33682", "#2AA198",
+                "#EEE8D5", "#073642", "#CB4B16", "#586E75", "#657B83", "#839496", "#6C71C4",
+                "#93A1A1", "#FDF6E3",
+            ],
+            Self::TangoDark => &[
+                "#000000", "#CC0000", "#4E9A06", "#C4A000", "#3465A4", "#75507B", "#06989A",
+                "#D3D7CF", "#555753", "#EF2929", "#8AE234", "#FCE94F", "#729FCF", "#AD7FA8",
+                "#34E2E2", "#EEEEEC",
+            ],
+            Self::TangoLight => &[
+                "#000000", "#CC0000", "#4E9A06", "#C4A000", "#3465A4", "#75507B", "#06989A",
+                "#D3D7CF", "#555753", "#EF2929", "#8AE234", "#FCE94F", "#729FCF", "#AD7FA8",
+                "#34E2E2", "#EEEEEC",
+            ],
+            Self::DarkPlus => &[
+                "#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd",
+                "#e5e5e5", "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6",
+                "#29b8db", "#e5e5e5",
+            ],
+            Self::Cga => &[
+                "#000000", "#AA0000", "#00AA00", "#AA5500", "#0000AA", "#AA00AA", "#00AAAA",
+                "#AAAAAA", "#555555", "#FF5555", "#55FF55", "#FFFF55", "#5555FF", "#FF55FF",
+                "#55FFFF", "#FFFFFF",
+            ],
+            Self::Ibm5153 => &[
+                "#000000", "#AA0000", "#00AA00", "#C47E00", "#0000AA", "#AA00AA", "#00AAAA",
+                "#AAAAAA", "#555555", "#FF5555", "#55FF55", "#FFFF55", "#5555FF", "#FF55FF",
+                "#55FFFF", "#FFFFFF",
+            ],
+        };
+
+        table.get(usize::from(slot)).copied()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnapshotColorRequest {
+    pub mode: SnapshotColorMode,
+    pub theme: SnapshotTheme,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnapshotColorMetadata {
+    pub mode: SnapshotColorMode,
+    pub theme: SnapshotTheme,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRegistryEntry {
     pub session_key: String,
@@ -40,6 +246,7 @@ pub enum ClientRequest {
     Snapshot {
         tab: String,
         wait_stable_ms: u64,
+        color: Option<SnapshotColorRequest>,
     },
     Fetch {
         tab: String,
@@ -81,6 +288,7 @@ pub enum ServerResponse {
         cols: u16,
         rows: u16,
         text: String,
+        color: Option<SnapshotColorMetadata>,
     },
     FetchText {
         tab: String,
@@ -387,6 +595,14 @@ fn encode_key(spec: KeySpec) -> Result<Vec<u8>> {
 fn encode_sgr_mouse(code: u16, x: u16, y: u16, down: bool) -> Vec<u8> {
     let suffix = if down { 'M' } else { 'm' };
     format!("\x1b[<{};{};{}{}", code, x + 1, y + 1, suffix).into_bytes()
+}
+
+fn normalize_theme_name(input: &str) -> String {
+    input
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 pub fn now_ms() -> u128 {
