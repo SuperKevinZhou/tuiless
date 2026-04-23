@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build release notes from commit history
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $previousTag = ""
+
+          try {
+            $previousTag = (git describe --tags --abbrev=0 "$tag^" 2>$null).Trim()
+          } catch {
+            $previousTag = ""
+          }
+
+          if ([string]::IsNullOrWhiteSpace($previousTag)) {
+            $logRange = $tag
+            $header = "Changes in $tag (first release)"
+          } else {
+            $logRange = "$previousTag..$tag"
+            $header = "Changes from $previousTag to $tag"
+          }
+
+          $commitNotes = git log $logRange --pretty=format:"- %H %s"
+          if (-not $commitNotes) {
+            $commitNotes = "- No commit entries found in range."
+          }
+
+          $notesPath = Join-Path $env:RUNNER_TEMP "release_notes.md"
+          $notesLines = @(
+            "## $header"
+            ""
+            "$commitNotes"
+          )
+          $notesLines | Set-Content -Path $notesPath -Encoding utf8
+
+          "notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: ${{ steps.notes.outputs.notes_path }}
+          files: target/release/tuiless.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
