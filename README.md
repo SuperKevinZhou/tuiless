@@ -13,7 +13,9 @@ This is intentionally similar in spirit to browser automation CLIs, but the targ
 
 ## Status
 
-This project is in an early v0 prototype state.
+The Windows-first v0 runtime is complete and hardened for repeatable CLI automation. The repository
+ships unit coverage plus cross-process smoke coverage for runtime startup, PTY input, snapshots,
+fetch, resize, and workspace isolation.
 
 Working core path:
 
@@ -26,12 +28,13 @@ Working core path:
 - list open tabs;
 - install the bundled `tuiless` Codex skill with `skill --path`.
 
-Known rough edges:
+Platform and validation boundaries:
 
 - Windows is the only currently implemented IPC target.
 - `attach` now restores ANSI colors and uses an event-priority refresh loop, but still needs broader real-TUI validation.
 - mouse commands inject terminal mouse escape sequences, but target applications must enable mouse reporting.
-- integration tests are not yet complete.
+- Unix domain sockets and non-Windows PTY validation are not implemented;
+- `attach` still needs a real interactive TUI pass in CI or a human terminal.
 
 ## Install / Build
 
@@ -105,6 +108,12 @@ Runtime state is scoped by workspace session key, while registry metadata lives 
 - set `TUILESS_REGISTRY_DIR` to override the registry location;
 - tab names are scoped to the current workspace;
 - `tab_1` in one workspace is independent from `tab_1` in another workspace.
+
+Runtime startup is race-tolerant: registry writes use a temporary-file publish path, malformed or
+stale registry files are discarded, named-pipe ownership prevents a second server from taking over, and
+background servers are detached from the invoking command's Windows process handles. IPC frames are
+limited to 16 MiB. Snapshot stability waits for a quiet period but always returns within five seconds
+even when a program continuously emits output.
 
 ## Command Reference
 
@@ -283,3 +292,16 @@ Run tests:
 ```powershell
 cargo test
 ```
+
+The integration suite launches real background runtimes, so its commands must remain serial. Run it
+directly when changing IPC or PTY behavior:
+
+```powershell
+cargo test --test runtime_smoke -- --test-threads=1
+cargo clippy --all-targets --all-features -- -D warnings
+cargo build --release
+```
+
+For a stale runtime, run `tuiless list` once from the affected workspace. If the registry points to a
+dead process it is removed and a fresh runtime is started. `close --all` is the deterministic cleanup
+operation used by the smoke tests.

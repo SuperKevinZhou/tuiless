@@ -420,7 +420,8 @@ fn spawn_runtime(cwd: &PathBuf, session_key: &str) -> Result<()> {
     }
 
     let exe = std::env::current_exe().context("failed to locate current executable")?;
-    ProcessCommand::new(exe)
+    let mut command = ProcessCommand::new(exe);
+    command
         .arg("serve")
         .arg("--session-key")
         .arg(session_key)
@@ -431,7 +432,13 @@ fn spawn_runtime(cwd: &PathBuf, session_key: &str) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .env_remove("Path")
-        .env_remove("PATH")
+        .env_remove("PATH");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x00000008 | 0x00000200);
+    }
+    command
         .spawn()
         .context("failed to spawn background runtime")?;
     Ok(())
@@ -439,14 +446,23 @@ fn spawn_runtime(cwd: &PathBuf, session_key: &str) -> Result<()> {
 
 fn process_exists(pid: u32) -> bool {
     std::process::Command::new("cmd")
-        .args(["/c", "tasklist", "/FI", &format!("PID eq {pid}")])
+        .args([
+            "/c",
+            "tasklist",
+            "/FI",
+            &format!("PID eq {pid}"),
+            "/FO",
+            "CSV",
+            "/NH",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
         .map(|output| {
             let text = String::from_utf8_lossy(&output.stdout);
-            text.contains(&pid.to_string())
+            text.lines()
+                .any(|line| line.trim_start().starts_with(&format!("\"{pid}\"")))
         })
         .unwrap_or(false)
 }

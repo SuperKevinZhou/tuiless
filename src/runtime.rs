@@ -269,6 +269,7 @@ async fn ensure_tab(
     cols: u16,
     rows: u16,
 ) -> Result<Arc<TabState>> {
+    validate_tab_name(tab)?;
     if let Some(existing) = state.read().await.tabs.get(tab).cloned() {
         return Ok(existing);
     }
@@ -300,6 +301,22 @@ async fn ensure_tab(
         .or_insert_with(|| Arc::clone(&tab_state))
         .clone();
     Ok(entry)
+}
+
+fn validate_tab_name(tab: &str) -> Result<()> {
+    if tab.is_empty() {
+        bail!("tab name cannot be empty");
+    }
+    if tab.len() > 128 {
+        bail!("tab name is too long (maximum 128 bytes)");
+    }
+    if tab
+        .chars()
+        .any(|character| character.is_control() || matches!(character, '\\' | '/' | ':'))
+    {
+        bail!("tab name contains an unsupported control or path character");
+    }
+    Ok(())
 }
 
 fn spawn_reader(tab_state: Arc<TabState>, session: Arc<PtySession>) -> Result<()> {
@@ -366,11 +383,18 @@ async fn write_bytes(tab: &TabState, bytes: &[u8]) -> Result<()> {
 
 async fn wait_stable(tab: &TabState, wait_stable_ms: u64) {
     let interval = Duration::from_millis(wait_stable_ms.max(1));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
         let before = *tab.last_activity_ms.read().await;
-        tokio::time::sleep(interval).await;
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if tokio::time::timeout(remaining, tokio::time::sleep(interval))
+            .await
+            .is_err()
+        {
+            break;
+        }
         let after = *tab.last_activity_ms.read().await;
-        if before == after {
+        if before == after || tokio::time::Instant::now() >= deadline {
             break;
         }
     }
@@ -378,7 +402,7 @@ async fn wait_stable(tab: &TabState, wait_stable_ms: u64) {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_VIEWPORT_HISTORY, VecDeque};
+    use super::{MAX_VIEWPORT_HISTORY, VecDeque, validate_tab_name};
 
     #[test]
     fn viewport_history_is_bounded() {
@@ -392,5 +416,13 @@ mod tests {
 
         assert_eq!(history.len(), MAX_VIEWPORT_HISTORY);
         assert_eq!(history.front().map(String::as_str), Some("frame-25"));
+    }
+
+    #[test]
+    fn tab_names_reject_path_and_control_characters() {
+        assert!(validate_tab_name("main").is_ok());
+        assert!(validate_tab_name("").is_err());
+        assert!(validate_tab_name("bad/name").is_err());
+        assert!(validate_tab_name("bad\nname").is_err());
     }
 }

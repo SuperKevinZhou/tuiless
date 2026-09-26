@@ -539,18 +539,38 @@ fn encode_key(spec: KeySpec) -> Result<Vec<u8>> {
     }
 
     let mut output = Vec::new();
-    if spec.alt {
+    if spec.alt
+        && matches!(
+            spec.key,
+            KeyCodeSpec::Char(_)
+                | KeyCodeSpec::Enter
+                | KeyCodeSpec::Tab
+                | KeyCodeSpec::BackTab
+                | KeyCodeSpec::Backspace
+                | KeyCodeSpec::Esc
+        )
+    {
         output.push(0x1b);
     }
 
+    let modifier = modifier_parameter(spec);
     match spec.key {
         KeyCodeSpec::Char(ch) => {
             if spec.ctrl {
                 let lower = ch.to_ascii_lowercase();
-                if !lower.is_ascii_alphabetic() {
-                    bail!("Ctrl chord currently only supports alphabetic keys");
-                }
-                let byte = (lower as u8) - b'a' + 1;
+                let byte = if lower.is_ascii_alphabetic() {
+                    (lower as u8) - b'a' + 1
+                } else {
+                    match lower {
+                        '@' | ' ' => 0,
+                        '[' => 27,
+                        '\\' => 28,
+                        ']' => 29,
+                        '^' => 30,
+                        '_' => 31,
+                        _ => bail!("unsupported Ctrl chord for `{ch}`"),
+                    }
+                };
                 output.push(byte);
             } else {
                 let rendered = if spec.shift {
@@ -568,16 +588,16 @@ fn encode_key(spec: KeySpec) -> Result<Vec<u8>> {
         KeyCodeSpec::BackTab => output.extend_from_slice(b"\x1b[Z"),
         KeyCodeSpec::Backspace => output.push(0x08),
         KeyCodeSpec::Esc => output.push(0x1b),
-        KeyCodeSpec::Left => output.extend_from_slice(b"\x1b[D"),
-        KeyCodeSpec::Right => output.extend_from_slice(b"\x1b[C"),
-        KeyCodeSpec::Up => output.extend_from_slice(b"\x1b[A"),
-        KeyCodeSpec::Down => output.extend_from_slice(b"\x1b[B"),
-        KeyCodeSpec::Home => output.extend_from_slice(b"\x1b[H"),
-        KeyCodeSpec::End => output.extend_from_slice(b"\x1b[F"),
-        KeyCodeSpec::PageUp => output.extend_from_slice(b"\x1b[5~"),
-        KeyCodeSpec::PageDown => output.extend_from_slice(b"\x1b[6~"),
-        KeyCodeSpec::Delete => output.extend_from_slice(b"\x1b[3~"),
-        KeyCodeSpec::Insert => output.extend_from_slice(b"\x1b[2~"),
+        KeyCodeSpec::Left => output.extend_from_slice(&csi_key("D", modifier)),
+        KeyCodeSpec::Right => output.extend_from_slice(&csi_key("C", modifier)),
+        KeyCodeSpec::Up => output.extend_from_slice(&csi_key("A", modifier)),
+        KeyCodeSpec::Down => output.extend_from_slice(&csi_key("B", modifier)),
+        KeyCodeSpec::Home => output.extend_from_slice(&csi_key("H", modifier)),
+        KeyCodeSpec::End => output.extend_from_slice(&csi_key("F", modifier)),
+        KeyCodeSpec::PageUp => output.extend_from_slice(&csi_tilde_key(5, modifier)),
+        KeyCodeSpec::PageDown => output.extend_from_slice(&csi_tilde_key(6, modifier)),
+        KeyCodeSpec::Delete => output.extend_from_slice(&csi_tilde_key(3, modifier)),
+        KeyCodeSpec::Insert => output.extend_from_slice(&csi_tilde_key(2, modifier)),
         KeyCodeSpec::F(index) => {
             let code = match index {
                 1 => b"\x1bOP".as_slice(),
@@ -594,11 +614,53 @@ fn encode_key(spec: KeySpec) -> Result<Vec<u8>> {
                 12 => b"\x1b[24~".as_slice(),
                 _ => bail!("unsupported function key F{index}"),
             };
-            output.extend_from_slice(code);
+            if modifier == 1 {
+                output.extend_from_slice(code);
+            } else {
+                let number = match index {
+                    1 => 11,
+                    2 => 12,
+                    3 => 13,
+                    4 => 14,
+                    5 => 15,
+                    6 => 17,
+                    7 => 18,
+                    8 => 19,
+                    9 => 20,
+                    10 => 21,
+                    11 => 23,
+                    12 => 24,
+                    _ => unreachable!(),
+                };
+                output.extend_from_slice(&csi_tilde_key(number, modifier));
+            }
         }
     }
 
     Ok(output)
+}
+
+fn modifier_parameter(spec: KeySpec) -> u8 {
+    1 + u8::from(spec.shift)
+        + 2 * u8::from(spec.alt)
+        + 4 * u8::from(spec.ctrl)
+        + 8 * u8::from(spec.meta)
+}
+
+fn csi_key(final_byte: &str, modifier: u8) -> Vec<u8> {
+    if modifier == 1 {
+        format!("\x1b[{final_byte}").into_bytes()
+    } else {
+        format!("\x1b[1;{modifier}{final_byte}").into_bytes()
+    }
+}
+
+fn csi_tilde_key(number: u8, modifier: u8) -> Vec<u8> {
+    if modifier == 1 {
+        format!("\x1b[{number}~").into_bytes()
+    } else {
+        format!("\x1b[{number};{modifier}~").into_bytes()
+    }
 }
 
 fn encode_sgr_mouse(code: u16, x: u16, y: u16, down: bool) -> Vec<u8> {
@@ -721,6 +783,39 @@ mod tests {
     fn parse_space_key_alias() {
         let spec = parse_key_spec("Space", &ModifierFlags::empty()).unwrap();
         assert_eq!(spec.key, KeyCodeSpec::Char(' '));
+    }
+
+    #[test]
+    fn modified_navigation_keys_use_xterm_csi_modifiers() {
+        let spec = KeySpec {
+            key: KeyCodeSpec::Left,
+            ctrl: true,
+            alt: false,
+            shift: true,
+            meta: false,
+        };
+        assert_eq!(
+            String::from_utf8(spec.to_bytes().unwrap()).unwrap(),
+            "\x1b[1;6D"
+        );
+
+        let spec = KeySpec {
+            key: KeyCodeSpec::F(5),
+            ctrl: false,
+            alt: true,
+            shift: false,
+            meta: false,
+        };
+        assert_eq!(
+            String::from_utf8(spec.to_bytes().unwrap()).unwrap(),
+            "\x1b[15;3~"
+        );
+    }
+
+    #[test]
+    fn ctrl_punctuation_uses_control_bytes() {
+        let spec = parse_key_spec("Ctrl+[", &ModifierFlags::empty()).unwrap();
+        assert_eq!(spec.to_bytes().unwrap(), vec![27]);
     }
 
     #[test]

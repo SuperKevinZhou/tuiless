@@ -7,6 +7,8 @@ use tokio::net::windows::named_pipe::{ClientOptions, PipeMode, ServerOptions};
 use tokio::sync::Mutex;
 use tokio::time::{Duration, timeout};
 
+const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
+
 pub struct HandlerResponse {
     pub bytes: Vec<u8>,
     pub shutdown: bool,
@@ -70,6 +72,11 @@ where
     timeout(Duration::from_secs(5), client.flush()).await??;
 
     let response_len = timeout(Duration::from_secs(5), client.read_u32_le()).await??;
+    if response_len > MAX_FRAME_BYTES {
+        return Err(anyhow!(
+            "runtime response is too large: {response_len} bytes"
+        ));
+    }
     let mut buffer = vec![0u8; response_len as usize];
     timeout(Duration::from_secs(5), client.read_exact(&mut buffer)).await??;
     let response = serde_json::from_slice(&buffer)?;
@@ -116,6 +123,9 @@ where
     Fut: std::future::Future<Output = Result<HandlerResponse>>,
 {
     let request_len = pipe.read_u32_le().await?;
+    if request_len > MAX_FRAME_BYTES {
+        return Err(anyhow!("runtime request is too large: {request_len} bytes"));
+    }
     let mut buffer = vec![0u8; request_len as usize];
     pipe.read_exact(&mut buffer).await?;
     let response = {

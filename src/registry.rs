@@ -17,7 +17,18 @@ pub fn registry_file(session_key: &str) -> Result<PathBuf> {
 pub fn write_entry(entry: &SessionRegistryEntry) -> Result<()> {
     let path = registry_file(&entry.session_key)?;
     let content = serde_json::to_vec_pretty(entry)?;
-    std::fs::write(path, content)?;
+    let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    std::fs::write(&temporary, content).with_context(|| {
+        format!(
+            "failed to write temporary session registry {}",
+            temporary.display()
+        )
+    })?;
+    // Windows cannot replace an existing file with rename, so remove the advisory entry first.
+    // The named pipe remains the authoritative singleton guard during this short gap.
+    let _ = std::fs::remove_file(&path);
+    std::fs::rename(&temporary, &path)
+        .with_context(|| format!("failed to publish session registry {}", path.display()))?;
     Ok(())
 }
 
@@ -28,9 +39,13 @@ pub fn read_entry(session_key: &str) -> Result<Option<SessionRegistryEntry>> {
     }
     let bytes = std::fs::read(&path)
         .with_context(|| format!("failed to read session registry {}", path.display()))?;
-    let entry = serde_json::from_slice::<SessionRegistryEntry>(&bytes)
-        .with_context(|| format!("failed to decode session registry {}", path.display()))?;
-    Ok(Some(entry))
+    match serde_json::from_slice::<SessionRegistryEntry>(&bytes) {
+        Ok(entry) => Ok(Some(entry)),
+        Err(_error) => {
+            let _ = std::fs::remove_file(&path);
+            Ok(None)
+        }
+    }
 }
 
 pub fn delete_entry(session_key: &str) -> Result<()> {

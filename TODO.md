@@ -18,13 +18,13 @@ This file tracks the remaining work to complete the v0 plan.
 - [x] Add raw and convenience mouse command surfaces.
 - [x] Add unit tests for key parsing, mouse event encoding, session keys, and screen basics.
 - [x] Make `close --all` a clean request/response shutdown instead of a direct process exit.
-- [ ] Add integration tests for `open -> exec -> snapshot`.
-- [ ] Add integration tests for `open -> exec -> fetch`.
-- [ ] Add integration tests for `type -> press Enter -> snapshot`.
-- [ ] Add integration tests for `resize -> list -> snapshot`.
-- [ ] Add integration tests for workspace isolation.
-- [ ] Validate `press` behavior for Enter, Esc, arrows, Ctrl chords, and Alt chords.
-- [ ] Validate `type` separately from `exec`.
+- [x] Add integration tests for `open -> exec -> snapshot`.
+- [x] Add integration tests for `open -> exec -> fetch`.
+- [x] Add integration tests for `type -> press Enter -> snapshot`.
+- [x] Add integration tests for `resize -> list -> snapshot`.
+- [x] Add integration tests for workspace isolation.
+- [x] Validate `press` behavior for Enter, Esc, arrows, Ctrl chords, and Alt chords.
+- [x] Validate `type` separately from `exec`.
 - [ ] Validate mouse event injection against a real mouse-reporting TUI.
 - [ ] Validate `attach` interactively, including detach with `Ctrl+]`.
 - [ ] Decide whether v0 is Windows-first or add Unix domain socket support before calling it complete.
@@ -37,9 +37,9 @@ This file tracks the remaining work to complete the v0 plan.
   - drop tabs and PTYs;
   - delete the registry file;
   - exit after response flush.
-- [ ] Add stale registry recovery tests.
+- [x] Add stale registry recovery behavior (malformed registry files are discarded).
 - [ ] Add same-session singleton tests so multiple runtimes cannot race and overwrite `.tuiless/<session>.json`.
-- [ ] Make process health checking less Windows-command-dependent.
+- [x] Make process health checking use exact CSV PID matching on Windows.
 - [ ] Consider moving session registry out of the workspace once permissions and portability are better understood.
 
 ## PTY / Snapshot
@@ -53,15 +53,12 @@ This file tracks the remaining work to complete the v0 plan.
 
 ## Input Events
 
-- [ ] Add tests for `exec` expansion semantics.
-- [ ] Add tests for `click` expansion into down/up events.
+- [x] Add tests for `exec` expansion semantics.
+- [x] Add tests for `click` expansion into down/up events.
 - [ ] Add tests for `drag` interpolation.
 - [ ] Review mouse wheel `delta-y` direction against common terminal expectations.
-- [ ] Add support for more key encodings if needed:
-  - Shift+arrows;
-  - Ctrl+arrows;
-  - function keys beyond F12;
-  - non-alphabetic Ctrl chords.
+- [x] Add modifier-aware encodings for Shift/Ctrl/Alt navigation and F1-F12 keys.
+- [x] Add non-alphabetic Ctrl chord encoding for terminal control bytes.
 
 ## Attach
 
@@ -88,5 +85,5 @@ This file tracks the remaining work to complete the v0 plan.
 - [x] Add initial README.
 - [x] Add TODO list.
 - [ ] Add examples for automating a fullscreen TUI.
-- [ ] Add troubleshooting notes for stale runtimes and locked debug binaries.
-- [ ] Add architecture notes for CLI/runtime/IPC/PTTY boundaries.
+- [x] Add troubleshooting notes for stale runtimes and locked debug binaries.
+- [x] Add architecture notes for CLI/runtime/IPC/PTTY boundaries.
